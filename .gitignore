@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+.ipynb_checkpoints/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+/inference/
+/inference_results/
+/output/
+/train_data/
+/log/
+
+*.DS_Store
+*.vs
+*.user
+*~
+*.vscode
+*.idea
+
+*.log
+.clang-format
+.clang_format.hook
+
+build/
+dist/
+*.egg-info/
+
+/deploy/android_demo/app/OpenCV/
+/deploy/android_demo/app/PaddleLite/
+/deploy/android_demo/app/.cxx/
+/deploy/android_demo/app/cache/
+
+test_tipc/web/models/
+test_tipc/web/node_modules/
+
+.venv/
+.worktrees/
+
+# --- local OCR web UI ---
+# generated run artefacts (annotated pages, exports) - recreated on every run
+ocr_webui_output/
+# scratch/preview builds
+_ui_preview_tmp.py
+# personal test documents kept locally, not part of the project
+# (brackets escaped: [OCR] would otherwise be read as a character class)
+docs/\[OCR\]_*.pdf
+docs/photo_*.jpg
+docs/photo_*.png
