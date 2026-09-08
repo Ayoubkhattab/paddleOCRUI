@@ -24,7 +24,7 @@ jobs:
     outputs:
       skip_gpu: ${{ steps.compute_skip.outputs.skip_gpu }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: compute_skip
         name: Compute skip_gpu (PR-only); push/workflow_dispatch always run GPU
         shell: bash
