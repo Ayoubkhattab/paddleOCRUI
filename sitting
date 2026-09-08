@@ -1,0 +1,124 @@
+دليل ترقية — من RTX 5050 (8GB) إلى RTX 5090 (32GB)
+تشغيل PaddleOCR بكامل قوته
+كل خطوة هنا مبنية على ما نجح فعلياً على هذا الجهاز (RTX 5050، من نفس جيل Blackwell)، لا توثيقاً عاماً. انسخ الأوامر بالترتيب.
+
+الجهاز الحالي (ما بنينا عليه)
+GPU
+RTX 5050 · 8 GB
+RAM
+24 GB
+النماذج المُحمَّلة
+6 نماذج، أثقلها 85 MB
+حجم الأنبوب الكلي
+~180 MB
+الجهاز الجديد (RTX 5090)
+GPU
+RTX 5090 · 32 GB
+RAM
+64 GB
+القرص
+2 TB
+الأنبوب الكامل الممكن
+~2.5 GB، 20+ نموذجاً
+1
+المصدر والبيئة
+استنسخ المستودع الرسمي مباشرة (لا مرآة SourceForge هذه المرة)، وثبّت Python 3.11 أو 3.12 — لا 3.13/3.14، فـPaddlePaddle لا توفّر عجلات (wheels) لهما بعد.
+
+# استنساخ المصدر الرسمي
+git clone https://github.com/PaddlePaddle/PaddleOCR.git
+cd PaddleOCR
+
+# بيئة افتراضية بـ Python 3.11 (تأكد أنه مثبَّت أولاً)
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+مهم
+لا تُثبّت داخل بايثون النظام الافتراضي إن كان 3.13/3.14 — التثبيت سينجح ظاهرياً أحياناً ثم يفشل عند أول استيراد لـpaddle.
+2
+PaddlePaddle GPU — بمساري تثبيت
+جرّب القناة الرسمية المستقرة أولاً. لو ظهرت أخطاء CUDNN عند أول استدلال حقيقي (وهو ما واجهناه على 5050)، فالبديل المضمون هو نفس عجلة nightly التي نجحت هنا فعلياً.
+
+المسار A — جرّب هذا أولاً
+
+python -m pip install --upgrade pip
+python -m pip install paddlepaddle-gpu==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+المسار B — إن فشل A بخطأ CUDNN/kernel (نفس ما حصل معنا على جيل Blackwell)
+
+python -m pip install https://paddle-qa.bj.bcebos.com/paddle-pipeline/Develop-TagBuild-Training-Windows-Gpu-Cuda12.9-Cudnn9.9-Trt10.5-Mkl-Avx-VS2019-SelfBuiltPypiUse/86d658f56ebf3a5a7b2b33ace48f22d10680d311/paddlepaddle_gpu-3.0.0.dev20250717-cp311-cp311-win_amd64.whl
+تحقّق
+python -c "import paddle; paddle.utils.run_check()"
+يجب أن تنتهي بـPaddlePaddle works well on 1 GPU. — إن ظهر خطأ CUDNN هنا، بدّل للمسار B ولا تكمل قبل نجاح هذا الفحص.
+3
+تثبيت PaddleOCR بكل الإضافات
+التثبيت بصيغة -e (قابل للتعديل) يبقي paddleocr يُقرأ من نفس المجلد الذي استنسخته — بلا هذا، سيستورد بايثون نسخة أخرى من site-packages بدل مصدرك المحلي.
+
+python -m pip install -e ".[all]"
+python -m pip install python-docx opencv-python gradio numpy
+هذا يجلب paddlex[ocr,genai-client,ie,trans] — أي كل الأنابيب (PP-StructureV3، PaddleOCR-VL، الترجمة، الاستخلاص المفتاحي) متاحة للاستيراد فوراً، لا حاجة لتثبيت كل واحد منفصلاً.
+
+4
+ذاكرة التخزين المؤقت للنماذج
+القرص 2 تيرابايت غالباً منفصل عن قرص النظام — وجّه التخزين إليه مباشرة بدل الإعداد الافتراضي (عادة داخل ملف تعريف المستخدم في C:).
+
+# قبل أي استيراد لـ paddle/paddleocr، أو كمتغيّر بيئة دائم في Windows
+setx PADDLE_PDX_CACHE_HOME "D:\paddlex_cache"
+5
+تنزيل كل النماذج القوية
+32 غيغابايت VRAM كافية لتحميل كل هذه معاً دون تناوب. كل سطر أدناه يُنزّل النموذج بمجرد إنشاء الكائن (نفس نمط get_ocr/get_table_reader في ocr_webui.py).
+
+الدور	النموذج	الحجم التقريبي
+تخطيط الصفحة (الأقوى)	PP-DocLayout_plus-L	~470 MB
+هيكل جدول محدود الحدود	SLANeXt_wired	~120 MB
+هيكل جدول بلا حدود	SLANeXt_wireless	~120 MB
+تصنيف نوع الجدول	PP-LCNet_x1_0_table_cls	~7 MB
+كشف خلايا (بحدود / بلا حدود)	RT-DETR-L_wired/wireless_table_cell_det	~86 MB × 2
+رسوم بيانية إلى جدول	PP-Chart2Table	~450 MB
+تعرّف لاتيني/صيني (الأقوى)	PP-OCRv5_server_rec	~150 MB
+تعرّف معادلات رياضية	PP-FormulaNet_plus-L	~470 MB
+كشف/تعرّف أختام	PP-OCRv4_server_seal_det	~110 MB
+تسوية مستند مصوَّر (فرد الطيّات)	UVDoc	~30 MB
+نموذج رؤية-لغة كامل	PaddleOCR-VL (v1.6، 0.9B)	~1.8 GB
+# تنزيل الأنبوب الكامل PP-StructureV3 بضربة واحدة (كل ما أعلاه عدا PaddleOCR-VL)
+python -c "from paddleocr import PPStructureV3; PPStructureV3(device='gpu')"
+
+# PaddleOCR-VL منفصل — أنبوب آخر تماماً
+python -c "from paddleocr import PaddleOCRVL; PaddleOCRVL(device='gpu')"
+
+# نموذج التخطيط الذي رقّيناه اليوم على 5050، لأقوى إصدار منه
+python -c "from paddleocr import LayoutDetection; LayoutDetection(model_name='PP-DocLayout_plus-L', device='gpu')"
+ملاحظة
+نموذج التعرّف العربي يبقى arabic_PP-OCRv5_mobile_rec بلا تغيير — تحقّقنا سابقاً من كتالوج PaddleX كاملاً: لا وجود لفئة "server" للعربية إطلاقاً. هذا سقف في المكتبة نفسها، لا في العتاد.
+6
+نقل ocr_webui.py وتعديله
+انسخ ocr_webui.py إلى جذر المستودع المُستنسَخ حديثاً. أربعة تعديلات تستحق القيمة الحقيقية للعتاد الجديد — كلها استبدال قيمة ثابتة، لا إعادة هيكلة:
+
+ocr_webui.py — كشف الأشكال، الأقوى من الذي رقّيناه اليوم
+- FIGURE_LAYOUT_MODEL = "PP-DocLayout-L"      # 125 MB، ما رقّينا إليه على 5050
+
++ FIGURE_LAYOUT_MODEL = "PP-DocLayout_plus-L" # ~470 MB، نفس ما يستخدمه PP-StructureV3
+ocr_webui.py — هيكل الجدول
+- TABLE_STRUCTURE_MODEL = "SLANet_plus"
+
++ TABLE_STRUCTURE_MODEL = "SLANeXt_wired"
+ocr_webui.py — دقة تصيير صفحات PDF قبل الـOCR
+- PDF_RENDER_SCALE = 200 / 72  # ~200 DPI
+
++ PDF_RENDER_SCALE = 300 / 72  # ~300 DPI — صفحة أكبر، تفاصيل حروف أوضح لكل النماذج
+أبقِ كما هو
+FIGURE_MAX_PAGE_SHARE = 0.4 وكل شبكات الأمان المشابهة. جرّبنا PP-DocLayout-L على نفس الصورة الصعبة (امتحان مصوَّر مائل) وصنّف 91% من الصفحة كصورة واحدة بثقة عالية — فشل مختلف عن النموذج الصغير، لا أفضل. هذه حدود دقة النموذج نفسه على صور صاخبة، لا حدود عتاد؛ لا يوجد مقدار VRAM يُصلحها.
+أما جدول الخلايا بحدود/بلا حدود (SLANeXt_wired مقابل SLANeXt_wireless) فيحتاج تصنيفاً أولاً — لا استبدال قيمة واحدة:
+
+تحميل PP-LCNet_x1_0_table_cls إضافةً لما سبق.
+تشغيله على قصاصة الجدول (نفس crop المستخدَم في detect_tables() حالياً) قبل استدعاء قارئ الهيكل.
+توجيه القصاصة إلى SLANeXt_wired أو _wireless حسب نتيجة التصنيف، بدل قارئ واحد ثابت للحالتين.
+تحسين حقيقي لجداول بلا حدود واضحة (شائعة في تقارير مصمَّمة بعناية)، لكنه تعديل بنيوي صغير في detect_tables()، لا سطر إعداد.
+
+7
+التشغيل
+cd PaddleOCR
+.venv\Scripts\activate
+python ocr_webui.py
+أول تشغيل سيُنزّل أي نموذج لم يُحمَّل مسبقاً عبر الأوامر أعلاه، ثم يفتح على http://127.0.0.1:7860 كما هنا تماماً.
+
+PaddleOCR-VL — لماذا لم يدخل ocr_webui.py مباشرة
+هذا الأنبوب مختلف جذرياً: مُخرَجه Markdown كامل للصفحة، لا قائمة أسطر بإحداثيات صندوق لكل سطر كما يُنتج مسارنا الحالي. ميزات مثل «تخطيط الصفحة الأصلي» في Word تعتمد كلياً على تلك الإحداثيات. دمجه يحتاج مساراً موازياً جديداً لا استبدال نموذج — يستحق تجربة مقارنة على وثيقة عربية حقيقية أولاً لمعرفة هل دقته العربية أعلى فعلاً قبل استثمار وقت الدمج.
+كل رقم حجم هنا تقديري (بعض ملفات PaddleX لا تُعلن حجمها قبل التنزيل الفعلي) — التنزيل الكلي المتوقع لكل ما سبق مجتمعاً نحو 2.5 غيغابايت، بعيد جداً عن حدود قرص الـ2 تيرابايت.
